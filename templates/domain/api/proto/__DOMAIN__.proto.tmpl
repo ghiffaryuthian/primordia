@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package __SERVICE_PROTO__.__DOMAIN__.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "__GO_MODULE__/internal/gen/__SERVICE_PROTO__/__DOMAIN__/v1;__DOMAIN__v1";
+
+service __DOMAIN_PASCAL__Service {
+  rpc Create__DOMAIN_PASCAL__(Create__DOMAIN_PASCAL__Request) returns (Create__DOMAIN_PASCAL__Response) {}
+  rpc Get__DOMAIN_PASCAL__(Get__DOMAIN_PASCAL__Request) returns (Get__DOMAIN_PASCAL__Response) {}
+  rpc List__DOMAIN_PLURAL_PASCAL__(List__DOMAIN_PLURAL_PASCAL__Request) returns (List__DOMAIN_PLURAL_PASCAL__Response) {}
+}
+
+message __DOMAIN_PASCAL__ {
+  string id = 1;
+  string name = 2;
+  bool active = 3;
+  google.protobuf.Timestamp created_at = 4;
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+message Create__DOMAIN_PASCAL__Request {
+  string name = 1;
+  bool active = 2;
+}
+
+message Create__DOMAIN_PASCAL__Response {
+  __DOMAIN_PASCAL__ __DOMAIN__ = 1;
+}
+
+message Get__DOMAIN_PASCAL__Request {
+  string id = 1;
+}
+
+message Get__DOMAIN_PASCAL__Response {
+  __DOMAIN_PASCAL__ __DOMAIN__ = 1;
+}
+
+message List__DOMAIN_PLURAL_PASCAL__Request {}
+
+message List__DOMAIN_PLURAL_PASCAL__Response {
+  repeated __DOMAIN_PASCAL__ __DOMAIN_PLURAL__ = 1;
+}

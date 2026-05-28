@@ -1,0 +1,9 @@
+package __DOMAIN__
+
+import "context"
+
+type Repository interface {
+	Create__DOMAIN_PASCAL__(ctx context.Context, input Create__DOMAIN_PASCAL__Input) (__DOMAIN_PASCAL__, error)
+	Get__DOMAIN_PASCAL__(ctx context.Context, id string) (__DOMAIN_PASCAL__, error)
+	List__DOMAIN_PLURAL_PASCAL__(ctx context.Context) ([]__DOMAIN_PASCAL__, error)
+}

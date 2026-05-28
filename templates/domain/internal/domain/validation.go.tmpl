@@ -1,0 +1,17 @@
+package __DOMAIN__
+
+import "strings"
+
+func validateCreate__DOMAIN_PASCAL__Input(input Create__DOMAIN_PASCAL__Input) error {
+	if strings.TrimSpace(input.Name) == "" {
+		return ErrInvalidArgument
+	}
+	return nil
+}
+
+func validateID(id string) error {
+	if strings.TrimSpace(id) == "" {
+		return ErrInvalidArgument
+	}
+	return nil
+}

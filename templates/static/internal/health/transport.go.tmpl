@@ -1,0 +1,13 @@
+package health
+
+import (
+	"net/http"
+
+	"__GO_MODULE__/internal/gen/__SERVICE_PROTO__/health/v1/healthv1connect"
+)
+
+const GetHealthProcedure = healthv1connect.HealthServiceGetHealthProcedure
+
+func RegisterConnect(mux *http.ServeMux, handler *Handler) {
+	mux.Handle(healthv1connect.NewHealthServiceHandler(handler))
+}

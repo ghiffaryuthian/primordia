@@ -1,0 +1,55 @@
+package config
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/ilyakaznacheev/cleanenv"
+)
+
+type Config struct {
+	App      App
+	Web      Web
+	Otel     Otel
+	Server   Server
+	Database Database
+}
+
+type App struct {
+	Environment string `env:"APP_ENVIRONMENT" env-default:"development"`
+}
+
+type Web struct {
+	Address string `env:"VITE_WEB_SERVER_ADDRESS" env-default:"localhost"`
+	Port    string `env:"VITE_WEB_PORT" env-default:"3001"`
+	DistDir string `env:"WEB_DIST_DIR" env-default:"web/dist"`
+}
+
+type Server struct {
+	Address string `env:"SERVER_ADDRESS" env-default:":8080"`
+}
+
+type Otel struct {
+	CollectorEndpoint string `env:"OTEL_COLLECTOR_ENDPOINT" env-default:"localhost:4317"`
+}
+
+type Database struct {
+	Host     string `env:"DATABASE_HOST" env-default:"localhost"`
+	Port     int    `env:"DATABASE_PORT" env-default:"5432"`
+	Name     string `env:"DATABASE_NAME" env-default:"__SERVICE_PROTO__"`
+	User     string `env:"DATABASE_USER" env-default:"postgres"`
+	Password string `env:"DATABASE_PASSWORD" env-default:"__SERVICE_SLUG__"`
+}
+
+func NewConfig() (*Config, error) {
+	cfg := &Config{}
+
+	if _, err := os.Stat(".env"); err == nil {
+		_ = cleanenv.ReadConfig(".env", cfg)
+	}
+	if err := cleanenv.ReadEnv(cfg); err != nil {
+		return nil, fmt.Errorf("config error: %w", err)
+	}
+
+	return cfg, nil
+}

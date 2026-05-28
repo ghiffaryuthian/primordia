@@ -1,0 +1,122 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+	"time"
+
+__DOMAIN_IMPORTS_GO__	"__GO_MODULE__/internal/health"
+	"__GO_MODULE__/internal/infra/config"
+	httpinfra "__GO_MODULE__/internal/infra/http"
+	"__GO_MODULE__/internal/infra/observability"
+	postgresinfra "__GO_MODULE__/internal/infra/postgres"
+	"__GO_MODULE__/internal/infra/postgres/sqlc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+)
+
+const (
+	serviceName = "__SERVICE_SLUG__-api"
+	scopeAPI    = "__GO_MODULE__/cmd/api"
+	scopeHealth = "__GO_MODULE__/internal/health"
+	scopePG     = "__GO_MODULE__/internal/infra/postgres"
+__DOMAIN_SCOPE_CONSTS_GO__)
+
+func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	cfg, err := config.NewConfig()
+	if err != nil {
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
+	}
+
+	obs, err := observability.Init(ctx, cfg.Otel.CollectorEndpoint, serviceName, cfg.App.Environment)
+	if err != nil {
+		slog.Error("failed to initialize observability", "error", err)
+		os.Exit(1)
+	}
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := obs.Shutdown(shutdownCtx); err != nil {
+			slog.Error("failed to shutdown observability", "error", err)
+		}
+	}()
+
+	apiObs := obs.Scope(scopeAPI)
+	healthObs := obs.Scope(scopeHealth)
+	pgObs := obs.Scope(scopePG)
+__DOMAIN_SCOPE_INITS_GO__	logger := apiObs.Logger()
+	tracer := apiObs.Tracer()
+
+	ctx, bootstrapSpan := tracer.Start(ctx, "service.bootstrap")
+	bootstrapErr := errors.New("service bootstrap did not complete")
+	defer observability.FinishSpan(bootstrapSpan, &bootstrapErr)
+
+	db, err := postgresinfra.NewConnection(ctx, &postgresinfra.Config{
+		Host:     cfg.Database.Host,
+		Port:     strconv.Itoa(cfg.Database.Port),
+		User:     cfg.Database.User,
+		Password: cfg.Database.Password,
+		DBName:   cfg.Database.Name,
+	})
+	if err != nil {
+		logger.Error("failed to connect to database", "error", err)
+		os.Exit(1)
+	}
+	defer db.Close()
+
+	queries := sqlc.New(db)
+
+	healthUsecase := health.NewUsecase(serviceName, cfg.App.Environment, healthObs.Tracer())
+	healthHandler := health.NewHandler(healthUsecase, healthObs)
+__DOMAIN_INIT_BLOCKS_GO__
+	mux := http.NewServeMux()
+	health.RegisterConnect(mux, healthHandler)
+__DOMAIN_REGISTRATIONS_GO__
+	rootHandler := httpinfra.Chain(
+		mux,
+		httpinfra.CORSMiddleware,
+		httpinfra.SpanStatusMiddleware,
+	)
+	handler := otelhttp.NewHandler(
+		rootHandler,
+		"api.server",
+		otelhttp.WithSpanNameFormatter(func(_ string, r *http.Request) string {
+			return r.Method + " " + r.URL.Path
+		}),
+	)
+
+	server := &http.Server{
+		Addr:              cfg.Server.Address,
+		Handler:           h2c.NewHandler(handler, &http2.Server{}),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	bootstrapErr = nil
+
+	go func() {
+		logger.Info("server listening", "address", cfg.Server.Address)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("server failed", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-ctx.Done()
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		logger.Error("server shutdown failed", "error", err)
+		os.Exit(1)
+	}
+}

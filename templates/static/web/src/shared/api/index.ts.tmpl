@@ -1,0 +1,28 @@
+import { createClient } from '@connectrpc/connect'
+import { createConnectTransport } from '@connectrpc/connect-web'
+
+import { HealthService } from '#/gen/__SERVICE_PROTO__/health/v1/health_pb'
+__DOMAIN_CLIENT_IMPORTS_TS__
+export function create__SERVICE_PASCAL__Clients({
+  apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080',
+}: {
+  apiBaseUrl?: string
+} = {}) {
+  const transport = createConnectTransport({
+    baseUrl: trimApiBaseUrl(apiBaseUrl),
+  })
+
+  return {
+    health: createClient(HealthService, transport),
+__DOMAIN_CLIENT_ENTRIES_TS__  }
+}
+
+export const clients = create__SERVICE_PASCAL__Clients()
+
+export function trimApiBaseUrl(apiBaseUrl: string) {
+  return apiBaseUrl.replace(/\/$/, '')
+}
+
+export function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error)
+}

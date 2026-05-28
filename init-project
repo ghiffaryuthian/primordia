@@ -1,0 +1,405 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  init-project [options]
+
+Options:
+  --service <name>      New service/application name.
+  --module <path>       Go module path, for example github.com/acme/billing.
+  --target <dir>        Directory to create.
+  --domains <list>      Comma or space separated domains, for example "customer, invoice".
+  --domain <name>       Add one domain. Can be repeated.
+  --force               Replace an existing target directory.
+  -h, --help            Show this help.
+
+If service, module, target, or domains are missing, Primordia prompts for them.
+USAGE
+}
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+primordia_dir="$(cd -- "$script_dir" && pwd)"
+template_dir="$primordia_dir/templates"
+
+service_name=""
+go_module=""
+target_dir=""
+domains_raw=""
+force=false
+
+declare -a requested_domains=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --service)
+      [[ $# -ge 2 ]] || { echo "--service requires a value" >&2; exit 2; }
+      service_name="$2"
+      shift 2
+      ;;
+    --module)
+      [[ $# -ge 2 ]] || { echo "--module requires a value" >&2; exit 2; }
+      go_module="$2"
+      shift 2
+      ;;
+    --target)
+      [[ $# -ge 2 ]] || { echo "--target requires a directory" >&2; exit 2; }
+      target_dir="$2"
+      shift 2
+      ;;
+    --domains)
+      [[ $# -ge 2 ]] || { echo "--domains requires a value" >&2; exit 2; }
+      domains_raw+=" $2"
+      shift 2
+      ;;
+    --domain)
+      [[ $# -ge 2 ]] || { echo "--domain requires a value" >&2; exit 2; }
+      requested_domains+=("$2")
+      shift 2
+      ;;
+    --force)
+      force=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      echo "Unknown option: $1" >&2
+      usage >&2
+      exit 2
+      ;;
+  esac
+done
+
+slugify() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
+}
+
+snakeify() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -E 's/[^a-z0-9]+/_/g; s/^_+//; s/_+$//; s/_+/_/g'
+}
+
+pascal_case() {
+  local value
+  value="$(snakeify "$1")"
+  awk -F_ '{
+    for (i = 1; i <= NF; i++) {
+      if ($i == "") continue
+      printf toupper(substr($i, 1, 1)) substr($i, 2)
+    }
+  }' <<<"$value"
+}
+
+camel_case() {
+  local pascal
+  pascal="$(pascal_case "$1")"
+  printf '%s%s' "$(tr '[:upper:]' '[:lower:]' <<<"${pascal:0:1}")" "${pascal:1}"
+}
+
+pluralize() {
+  local value="$1"
+  case "$value" in
+    *y) printf '%sies' "${value%y}" ;;
+    *s|*x|*z|*ch|*sh) printf '%ses' "$value" ;;
+    *) printf '%ss' "$value" ;;
+  esac
+}
+
+prompt() {
+  local label="$1"
+  local default_value="${2:-}"
+  local answer=""
+
+  if [[ -n "$default_value" ]]; then
+    read -r -p "$label [$default_value]: " answer
+    printf '%s' "${answer:-$default_value}"
+  else
+    read -r -p "$label: " answer
+    printf '%s' "$answer"
+  fi
+}
+
+require_value() {
+  local name="$1"
+  local value="$2"
+  if [[ -z "$value" ]]; then
+    echo "$name is required." >&2
+    exit 2
+  fi
+}
+
+render_template() {
+  local source="$1"
+  local target="$2"
+  mkdir -p "$(dirname "$target")"
+  perl -0pe '
+    s/__SERVICE_NAME__/$ENV{SERVICE_NAME}/g;
+    s/__SERVICE_SLUG__/$ENV{SERVICE_SLUG}/g;
+    s/__SERVICE_PROTO__/$ENV{SERVICE_PROTO}/g;
+    s/__SERVICE_PASCAL__/$ENV{SERVICE_PASCAL}/g;
+    s/__SERVICE_CAMEL__/$ENV{SERVICE_CAMEL}/g;
+    s/__GO_MODULE__/$ENV{GO_MODULE}/g;
+    s/__DOMAINS_README__/$ENV{DOMAINS_README}/g;
+    s/__DOMAINS_TS__/$ENV{DOMAINS_TS}/g;
+    s/__DOMAIN_IMPORTS_GO__/$ENV{DOMAIN_IMPORTS_GO}/g;
+    s/__DOMAIN_SCOPE_CONSTS_GO__/$ENV{DOMAIN_SCOPE_CONSTS_GO}/g;
+    s/__DOMAIN_SCOPE_INITS_GO__/$ENV{DOMAIN_SCOPE_INITS_GO}/g;
+    s/__DOMAIN_INIT_BLOCKS_GO__/$ENV{DOMAIN_INIT_BLOCKS_GO}/g;
+    s/__DOMAIN_REGISTRATIONS_GO__/$ENV{DOMAIN_REGISTRATIONS_GO}/g;
+    s/__DOMAIN_CLIENT_IMPORTS_TS__/$ENV{DOMAIN_CLIENT_IMPORTS_TS}/g;
+    s/__DOMAIN_CLIENT_ENTRIES_TS__/$ENV{DOMAIN_CLIENT_ENTRIES_TS}/g;
+    s/__DOMAIN__/$ENV{DOMAIN}/g;
+    s/__DOMAIN_PASCAL__/$ENV{DOMAIN_PASCAL}/g;
+    s/__DOMAIN_CAMEL__/$ENV{DOMAIN_CAMEL}/g;
+    s/__DOMAIN_PLURAL__/$ENV{DOMAIN_PLURAL}/g;
+    s/__DOMAIN_PLURAL_PASCAL__/$ENV{DOMAIN_PLURAL_PASCAL}/g;
+    s/__DOMAIN_TABLE__/$ENV{DOMAIN_TABLE}/g;
+  ' "$source" >"$target"
+}
+
+render_to_stdout() {
+  local source="$1"
+  perl -0pe '
+    s/__SERVICE_NAME__/$ENV{SERVICE_NAME}/g;
+    s/__SERVICE_SLUG__/$ENV{SERVICE_SLUG}/g;
+    s/__SERVICE_PROTO__/$ENV{SERVICE_PROTO}/g;
+    s/__SERVICE_PASCAL__/$ENV{SERVICE_PASCAL}/g;
+    s/__SERVICE_CAMEL__/$ENV{SERVICE_CAMEL}/g;
+    s/__GO_MODULE__/$ENV{GO_MODULE}/g;
+    s/__DOMAIN__/$ENV{DOMAIN}/g;
+    s/__DOMAIN_PASCAL__/$ENV{DOMAIN_PASCAL}/g;
+    s/__DOMAIN_CAMEL__/$ENV{DOMAIN_CAMEL}/g;
+    s/__DOMAIN_PLURAL__/$ENV{DOMAIN_PLURAL}/g;
+    s/__DOMAIN_PLURAL_PASCAL__/$ENV{DOMAIN_PLURAL_PASCAL}/g;
+    s/__DOMAIN_TABLE__/$ENV{DOMAIN_TABLE}/g;
+  ' "$source"
+}
+
+render_static_templates() {
+  while IFS= read -r -d '' source; do
+    local relative target
+    relative="${source#$template_dir/static/}"
+    relative="${relative//__SERVICE_PROTO__/$SERVICE_PROTO}"
+    relative="${relative%.tmpl}"
+    target="$target_dir/$relative"
+    render_template "$source" "$target"
+  done < <(find "$template_dir/static" -type f -print0)
+}
+
+render_domain_templates() {
+  local domain="$1"
+  DOMAIN="$domain"
+  DOMAIN_PASCAL="$(pascal_case "$domain")"
+  DOMAIN_CAMEL="$(camel_case "$domain")"
+  DOMAIN_PLURAL="$(pluralize "$domain")"
+  DOMAIN_PLURAL_PASCAL="$(pascal_case "$DOMAIN_PLURAL")"
+  DOMAIN_TABLE="$DOMAIN_PLURAL"
+  export DOMAIN DOMAIN_PASCAL DOMAIN_CAMEL DOMAIN_PLURAL DOMAIN_PLURAL_PASCAL DOMAIN_TABLE
+
+  while IFS= read -r -d '' source; do
+    local relative target
+    relative="${source#$template_dir/domain/}"
+    relative="${relative//api\/proto/api/proto/$SERVICE_PROTO/$DOMAIN/v1}"
+    relative="${relative//internal\/domain/internal/$DOMAIN}"
+    relative="${relative//__DOMAIN__/$DOMAIN}"
+    relative="${relative%.tmpl}"
+    target="$target_dir/$relative"
+    render_template "$source" "$target"
+  done < <(find "$template_dir/domain" -type f ! -path '*/migration_*' -print0)
+}
+
+render_migration() {
+  local migration timestamp
+  timestamp="$(date +%Y%m%d%H%M%S)"
+  migration="$target_dir/db/migrations/${timestamp}_create_domains.sql"
+  mkdir -p "$(dirname "$migration")"
+  {
+    echo "-- +goose Up"
+    echo "-- +goose StatementBegin"
+    echo "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
+    echo
+    for domain in "${domain_snakes[@]}"; do
+      DOMAIN="$domain"
+      DOMAIN_PLURAL="$(pluralize "$domain")"
+      DOMAIN_TABLE="$DOMAIN_PLURAL"
+      export DOMAIN DOMAIN_PLURAL DOMAIN_TABLE
+      render_to_stdout "$template_dir/snippets/migration_table.sql.tmpl"
+      echo
+    done
+    echo "-- +goose StatementEnd"
+    echo
+    echo "-- +goose Down"
+    echo "-- +goose StatementBegin"
+    for ((idx=${#domain_snakes[@]}-1; idx>=0; idx--)); do
+      DOMAIN="${domain_snakes[$idx]}"
+      DOMAIN_PLURAL="$(pluralize "$DOMAIN")"
+      DOMAIN_TABLE="$DOMAIN_PLURAL"
+      export DOMAIN DOMAIN_PLURAL DOMAIN_TABLE
+      render_to_stdout "$template_dir/snippets/migration_drop.sql.tmpl"
+      echo
+    done
+    echo "-- +goose StatementEnd"
+  } >"$migration"
+}
+
+build_dynamic_blocks() {
+  DOMAINS_README=""
+  DOMAINS_TS=""
+  DOMAIN_IMPORTS_GO=""
+  DOMAIN_SCOPE_CONSTS_GO=""
+  DOMAIN_SCOPE_INITS_GO=""
+  DOMAIN_INIT_BLOCKS_GO=""
+  DOMAIN_REGISTRATIONS_GO=""
+  DOMAIN_CLIENT_IMPORTS_TS=""
+  DOMAIN_CLIENT_ENTRIES_TS=""
+
+  for domain in "${domain_snakes[@]}"; do
+    local pascal camel plural plural_pascal
+    pascal="$(pascal_case "$domain")"
+    camel="$(camel_case "$domain")"
+    plural="$(pluralize "$domain")"
+    plural_pascal="$(pascal_case "$plural")"
+
+    DOMAINS_README+="- \`$domain\`"$'\n'
+    DOMAINS_TS+="  '$domain',"$'\n'
+    DOMAIN_IMPORTS_GO+=$'\t'"\"$go_module/internal/$domain\""$'\n'
+    DOMAIN_SCOPE_CONSTS_GO+=$'\t'"scope${pascal} = \"$go_module/internal/$domain\""$'\n'
+    DOMAIN_SCOPE_INITS_GO+=$'\t'"${camel}Obs := obs.Scope(scope${pascal})"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\n\t'"${camel}Repository := postgresinfra.New${pascal}Repository(queries, ${camel}Obs)"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t'"${camel}Usecase := $domain.NewUsecase(${camel}Repository, ${camel}Obs)"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t'"${camel}Handler := $domain.NewHandler(${camel}Usecase, ${camel}Obs)"$'\n'
+    DOMAIN_REGISTRATIONS_GO+=$'\t'"$domain.RegisterConnect(mux, ${camel}Handler)"$'\n'
+    DOMAIN_CLIENT_IMPORTS_TS+="import { ${pascal}Service } from '#/gen/$SERVICE_PROTO/$domain/v1/${domain}_pb'"$'\n'
+    DOMAIN_CLIENT_ENTRIES_TS+=$'    '"$camel: createClient(${pascal}Service, transport),"$'\n'
+  done
+
+  export DOMAINS_README DOMAINS_TS DOMAIN_IMPORTS_GO DOMAIN_SCOPE_CONSTS_GO
+  export DOMAIN_SCOPE_INITS_GO DOMAIN_INIT_BLOCKS_GO DOMAIN_REGISTRATIONS_GO
+  export DOMAIN_CLIENT_IMPORTS_TS DOMAIN_CLIENT_ENTRIES_TS
+}
+
+if [[ ! -d "$template_dir/static" || ! -d "$template_dir/domain" ]]; then
+  echo "Template directory is incomplete: $template_dir" >&2
+  exit 1
+fi
+
+if [[ -z "$service_name" ]]; then
+  service_name="$(prompt "Service name")"
+fi
+require_value "Service name" "$service_name"
+
+SERVICE_NAME="$service_name"
+SERVICE_SLUG="$(slugify "$service_name")"
+SERVICE_PROTO="$(snakeify "$service_name")"
+SERVICE_PASCAL="$(pascal_case "$service_name")"
+SERVICE_CAMEL="$(camel_case "$service_name")"
+
+if [[ -z "$SERVICE_SLUG" || -z "$SERVICE_PROTO" ]]; then
+  echo "Service name must contain at least one letter or digit." >&2
+  exit 2
+fi
+
+if [[ -z "$go_module" ]]; then
+  go_module="$(prompt "Go module" "github.com/your-org/$SERVICE_SLUG")"
+fi
+require_value "Go module" "$go_module"
+GO_MODULE="$go_module"
+
+if [[ -z "$target_dir" ]]; then
+  target_dir="$(prompt "Target directory" "./$SERVICE_SLUG")"
+fi
+require_value "Target directory" "$target_dir"
+
+for domain in "${requested_domains[@]}"; do
+  domains_raw+=" $domain"
+done
+
+if [[ -z "${domains_raw//[[:space:],]/}" ]]; then
+  domains_raw="$(prompt "Domains (comma or space separated)")"
+fi
+require_value "Domains" "${domains_raw//[[:space:],]/}"
+
+declare -a domain_snakes=()
+declare -A seen_domains=()
+for raw_domain in $(tr ',;' '  ' <<<"$domains_raw"); do
+  domain_snake="$(snakeify "$raw_domain")"
+  if [[ -z "$domain_snake" ]]; then
+    continue
+  fi
+  if [[ "$domain_snake" == "health" ]]; then
+    echo "Domain name 'health' is reserved for the health endpoint." >&2
+    exit 2
+  fi
+  if [[ -z "${seen_domains[$domain_snake]:-}" ]]; then
+    domain_snakes+=("$domain_snake")
+    seen_domains[$domain_snake]=1
+  fi
+done
+
+if [[ ${#domain_snakes[@]} -eq 0 ]]; then
+  echo "At least one domain is required." >&2
+  exit 2
+fi
+
+if [[ -e "$target_dir" ]]; then
+  if [[ "$force" != true ]]; then
+    echo "Target already exists: $target_dir" >&2
+    echo "Pass --force to replace it." >&2
+    exit 1
+  fi
+  rm -rf "$target_dir"
+fi
+
+mkdir -p "$target_dir"
+export SERVICE_NAME SERVICE_SLUG SERVICE_PROTO SERVICE_PASCAL SERVICE_CAMEL GO_MODULE
+
+build_dynamic_blocks
+render_static_templates
+render_migration
+for domain in "${domain_snakes[@]}"; do
+  render_domain_templates "$domain"
+done
+
+if command -v gofmt >/dev/null 2>&1; then
+  find "$target_dir" -path '*/internal/gen/*' -prune -o -name '*.go' -print0 | xargs -0 gofmt -w
+fi
+
+domains_summary=""
+for domain in "${domain_snakes[@]}"; do
+  if [[ -z "$domains_summary" ]]; then
+    domains_summary="$domain"
+  else
+    domains_summary+=", $domain"
+  fi
+done
+
+cat <<SUMMARY
+Created project at: $target_dir
+
+Service name:      $SERVICE_NAME
+Service slug:      $SERVICE_SLUG
+Proto namespace:   $SERVICE_PROTO
+Go module:         $GO_MODULE
+Domains:           $domains_summary
+
+Recommended next steps:
+  cd $target_dir
+  git init
+  pnpm --dir web install
+  task dev:tools
+  task proto:generate
+  task sqlc:generate
+  go mod tidy
+  task dev:prepare
+SUMMARY

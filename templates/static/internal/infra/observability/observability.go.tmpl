@@ -1,0 +1,98 @@
+package observability
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"os"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.40.0"
+	"go.opentelemetry.io/otel/trace"
+)
+
+type Runtime struct {
+	tracerProvider *sdktrace.TracerProvider
+	logger         *slog.Logger
+}
+
+type Scope struct {
+	name    string
+	runtime *Runtime
+}
+
+type Instrumentation interface {
+	Logger() *slog.Logger
+	Tracer() trace.Tracer
+}
+
+func Init(ctx context.Context, collectorEndpoint string, serviceName string, environment string) (*Runtime, error) {
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint(collectorEndpoint),
+		otlptracegrpc.WithInsecure(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := resource.New(ctx,
+		resource.WithAttributes(
+			semconv.ServiceName(serviceName),
+			semconv.DeploymentEnvironmentName(environment),
+			attribute.String("service.namespace", "app"),
+		),
+		resource.WithHost(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	tracerProvider := sdktrace.NewTracerProvider(
+		sdktrace.WithResource(res),
+		sdktrace.WithBatcher(exporter),
+	)
+	otel.SetTracerProvider(tracerProvider)
+
+	return &Runtime{
+		tracerProvider: tracerProvider,
+		logger:         slog.New(slog.NewJSONHandler(os.Stdout, nil)),
+	}, nil
+}
+
+func (r *Runtime) Scope(name string) Scope {
+	return Scope{name: name, runtime: r}
+}
+
+func (r *Runtime) Shutdown(ctx context.Context) error {
+	if r == nil || r.tracerProvider == nil {
+		return nil
+	}
+	return r.tracerProvider.Shutdown(ctx)
+}
+
+func (s Scope) Logger() *slog.Logger {
+	return s.runtime.logger.With("scope", s.name)
+}
+
+func (s Scope) Tracer() trace.Tracer {
+	return s.runtime.tracerProvider.Tracer(s.name)
+}
+
+func FinishSpan(span trace.Span, err *error) {
+	if err != nil && *err != nil {
+		span.RecordError(*err)
+		span.SetStatus(codes.Error, (*err).Error())
+	} else {
+		span.SetStatus(codes.Ok, "")
+	}
+	span.End()
+}
+
+func JoinShutdownErrors(values ...error) error {
+	return errors.Join(values...)
+}

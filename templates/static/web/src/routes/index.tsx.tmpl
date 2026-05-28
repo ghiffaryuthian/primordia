@@ -1,0 +1,49 @@
+import { createFileRoute } from '@tanstack/react-router'
+import { useQuery } from '@tanstack/react-query'
+
+import { clients, errorMessage } from '#/shared/api'
+
+const domains = [
+__DOMAINS_TS__]
+
+export const Route = createFileRoute('/')({ component: HomePage })
+
+function HomePage() {
+  const health = useQuery({
+    queryKey: ['health'],
+    queryFn: () => clients.health.getHealth({}),
+  })
+
+  return (
+    <main className="shell">
+      <section className="panel">
+        <p className="eyebrow">__SERVICE_NAME__</p>
+        <h1>Project bootstrap complete</h1>
+        <p className="lede">
+          Replace this screen with your first product workflow. The API scaffold
+          already includes health and CRUD surfaces for your chosen domains.
+        </p>
+        <dl className="status-grid">
+          <div>
+            <dt>API</dt>
+            <dd>{health.isPending ? 'Checking' : health.isError ? 'Unavailable' : 'Ready'}</dd>
+          </div>
+          <div>
+            <dt>Service</dt>
+            <dd>{health.data?.serviceName || '__SERVICE_SLUG__-api'}</dd>
+          </div>
+          <div>
+            <dt>Environment</dt>
+            <dd>{health.data?.environment || 'development'}</dd>
+          </div>
+        </dl>
+        {health.isError ? <p className="error">{errorMessage(health.error)}</p> : null}
+        <ul className="domains">
+          {domains.map((domain) => (
+            <li key={domain}>{domain}</li>
+          ))}
+        </ul>
+      </section>
+    </main>
+  )
+}

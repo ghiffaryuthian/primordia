@@ -1,0 +1,11 @@
+CREATE TABLE __DOMAIN_TABLE__ (
+    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    name TEXT NOT NULL,
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    CONSTRAINT __DOMAIN_TABLE___name_not_empty CHECK (length(trim(name)) > 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx___DOMAIN_TABLE___name ON __DOMAIN_TABLE__ (name);
+CREATE INDEX IF NOT EXISTS idx___DOMAIN_TABLE___active ON __DOMAIN_TABLE__ (active);

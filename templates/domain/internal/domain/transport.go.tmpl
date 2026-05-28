@@ -1,0 +1,11 @@
+package __DOMAIN__
+
+import (
+	"net/http"
+
+	"__GO_MODULE__/internal/gen/__SERVICE_PROTO__/__DOMAIN__/v1/__DOMAIN__v1connect"
+)
+
+func RegisterConnect(mux *http.ServeMux, handler *Handler) {
+	mux.Handle(__DOMAIN__v1connect.New__DOMAIN_PASCAL__ServiceHandler(handler))
+}

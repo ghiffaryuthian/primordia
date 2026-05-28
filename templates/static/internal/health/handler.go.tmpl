@@ -1,0 +1,39 @@
+package health
+
+import (
+	"context"
+	"log/slog"
+
+	"connectrpc.com/connect"
+	healthv1 "__GO_MODULE__/internal/gen/__SERVICE_PROTO__/health/v1"
+	"__GO_MODULE__/internal/infra/observability"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type HealthUsecase interface {
+	GetHealth(ctx context.Context) (Status, error)
+}
+
+type Handler struct {
+	usecase HealthUsecase
+	logger  *slog.Logger
+}
+
+func NewHandler(usecase HealthUsecase, instrumentation observability.Instrumentation) *Handler {
+	return &Handler{usecase: usecase, logger: instrumentation.Logger()}
+}
+
+func (h *Handler) GetHealth(ctx context.Context, _ *connect.Request[healthv1.GetHealthRequest]) (*connect.Response[healthv1.GetHealthResponse], error) {
+	status, err := h.usecase.GetHealth(ctx)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get health", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	return connect.NewResponse(&healthv1.GetHealthResponse{
+		Status:      healthv1.GetHealthResponse_SERVING_STATUS_SERVING,
+		ServiceName: status.ServiceName,
+		Environment: status.Environment,
+		CheckedAt:   timestamppb.New(status.CheckedAt),
+	}), nil
+}

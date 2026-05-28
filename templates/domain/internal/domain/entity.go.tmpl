@@ -1,0 +1,24 @@
+package __DOMAIN__
+
+import (
+	"errors"
+	"time"
+)
+
+var (
+	ErrInvalidArgument = errors.New("invalid __DOMAIN__")
+	ErrNotFound        = errors.New("__DOMAIN__ not found")
+)
+
+type __DOMAIN_PASCAL__ struct {
+	ID        string
+	Name      string
+	Active    bool
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+type Create__DOMAIN_PASCAL__Input struct {
+	Name   string
+	Active bool
+}

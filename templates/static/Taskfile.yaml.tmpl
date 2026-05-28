@@ -1,0 +1,100 @@
+version: "3"
+
+dotenv:
+  - .env
+
+vars:
+  BUF_VERSION: v1.69.0
+  SQLC_VERSION: v1.31.1
+  GOOSE_VERSION: v3.27.1
+  PROTOC_GEN_GO_VERSION: v1.36.11
+  PROTOC_GEN_CONNECT_GO_VERSION: v1.20.0
+  INFRA_COMPOSE: deploy/local/docker-compose.infra.yaml
+  OBS_COMPOSE: deploy/local/docker-compose.observability.yaml
+  APP_COMPOSE: deploy/local/docker-compose.app.yaml
+
+tasks:
+  dev:prepare:
+    desc: Prepare local development tools, generated code, database, and migrations.
+    cmds:
+      - cp -n .env.sample .env || true
+      - task: dev:tools
+      - task: web:install
+      - task: proto:generate
+      - task: sqlc:generate
+      - docker compose --file {{.INFRA_COMPOSE}} up --detach --remove-orphans db
+      - task: dev:wait-for-db
+      - task: migrate:up
+
+  dev:tools:
+    desc: Install pinned Go CLI tools.
+    silent: true
+    cmds:
+      - |
+        set -eu
+        install_go_tool() {
+          bin="$1"
+          version="$2"
+          pkg="$3"
+          if command -v "$bin" >/dev/null 2>&1; then
+            echo "$bin already available"
+            return
+          fi
+          go install "$pkg@$version"
+        }
+        install_go_tool buf {{.BUF_VERSION}} github.com/bufbuild/buf/cmd/buf
+        install_go_tool sqlc {{.SQLC_VERSION}} github.com/sqlc-dev/sqlc/cmd/sqlc
+        install_go_tool goose {{.GOOSE_VERSION}} github.com/pressly/goose/v3/cmd/goose
+        install_go_tool protoc-gen-go {{.PROTOC_GEN_GO_VERSION}} google.golang.org/protobuf/cmd/protoc-gen-go
+        install_go_tool protoc-gen-connect-go {{.PROTOC_GEN_CONNECT_GO_VERSION}} connectrpc.com/connect/cmd/protoc-gen-connect-go
+
+  web:install:
+    desc: Install web dependencies.
+    dir: web
+    cmds:
+      - pnpm install
+
+  proto:generate:
+    desc: Generate Go, ConnectRPC, and TypeScript protobuf bindings.
+    cmds:
+      - PATH="$(go env GOPATH)/bin:{{.ROOT_DIR}}/web/node_modules/.bin:$PATH" buf generate
+
+  sqlc:generate:
+    desc: Generate typed PostgreSQL accessors.
+    cmds:
+      - sqlc generate
+
+  migrate:up:
+    desc: Apply database migrations.
+    cmds:
+      - goose -dir db/migrations postgres "host=${DATABASE_HOST:-localhost} port=${DATABASE_PORT:-5432} user=${DATABASE_USER:-postgres} password=${DATABASE_PASSWORD:-__SERVICE_SLUG__} dbname=${DATABASE_NAME:-__SERVICE_PROTO__} sslmode=disable" up
+
+  migrate:create:
+    desc: "Create a new timestamped migration. Usage: task migrate:create -- add_widget"
+    cmds:
+      - goose -dir db/migrations create {{.CLI_ARGS}} sql
+
+  dev:wait-for-db:
+    internal: true
+    cmds:
+      - |
+        until docker exec __SERVICE_SLUG__-dev-db pg_isready -U "${DATABASE_USER:-postgres}" -d "${DATABASE_NAME:-__SERVICE_PROTO__}"; do
+          echo "Waiting for Postgres..."
+          sleep 2
+        done
+    silent: true
+
+  dev:obs:
+    desc: Start local observability stack.
+    cmds:
+      - docker compose --file {{.OBS_COMPOSE}} up --detach --remove-orphans
+
+  docker:up:
+    desc: Build and start local app containers with infrastructure and observability.
+    cmds:
+      - docker compose --file {{.INFRA_COMPOSE}} --file {{.OBS_COMPOSE}} --file {{.APP_COMPOSE}} up --build --detach --remove-orphans
+
+  docker:down:
+    desc: Stop local app, infrastructure, and observability containers.
+    cmds:
+      - docker compose --file {{.INFRA_COMPOSE}} --file {{.OBS_COMPOSE}} --file {{.APP_COMPOSE}} down --remove-orphans

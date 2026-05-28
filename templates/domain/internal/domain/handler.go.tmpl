@@ -1,0 +1,86 @@
+package __DOMAIN__
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+
+	"connectrpc.com/connect"
+	__DOMAIN__v1 "__GO_MODULE__/internal/gen/__SERVICE_PROTO__/__DOMAIN__/v1"
+	"__GO_MODULE__/internal/infra/observability"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+type ServiceUsecase interface {
+	Create__DOMAIN_PASCAL__(ctx context.Context, input Create__DOMAIN_PASCAL__Input) (__DOMAIN_PASCAL__, error)
+	Get__DOMAIN_PASCAL__(ctx context.Context, id string) (__DOMAIN_PASCAL__, error)
+	List__DOMAIN_PLURAL_PASCAL__(ctx context.Context) ([]__DOMAIN_PASCAL__, error)
+}
+
+type Handler struct {
+	usecase ServiceUsecase
+	logger  *slog.Logger
+}
+
+func NewHandler(usecase ServiceUsecase, instrumentation observability.Instrumentation) *Handler {
+	return &Handler{usecase: usecase, logger: instrumentation.Logger()}
+}
+
+func (h *Handler) Create__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request[__DOMAIN__v1.Create__DOMAIN_PASCAL__Request]) (*connect.Response[__DOMAIN__v1.Create__DOMAIN_PASCAL__Response], error) {
+	created, err := h.usecase.Create__DOMAIN_PASCAL__(ctx, Create__DOMAIN_PASCAL__Input{
+		Name:   req.Msg.Name,
+		Active: req.Msg.Active,
+	})
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to create __DOMAIN__", "error", err)
+		return nil, connectError(err)
+	}
+
+	return connect.NewResponse(&__DOMAIN__v1.Create__DOMAIN_PASCAL__Response{__DOMAIN_PASCAL__: toProto__DOMAIN_PASCAL__(created)}), nil
+}
+
+func (h *Handler) Get__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request[__DOMAIN__v1.Get__DOMAIN_PASCAL__Request]) (*connect.Response[__DOMAIN__v1.Get__DOMAIN_PASCAL__Response], error) {
+	found, err := h.usecase.Get__DOMAIN_PASCAL__(ctx, req.Msg.Id)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to get __DOMAIN__", "error", err)
+		return nil, connectError(err)
+	}
+
+	return connect.NewResponse(&__DOMAIN__v1.Get__DOMAIN_PASCAL__Response{__DOMAIN_PASCAL__: toProto__DOMAIN_PASCAL__(found)}), nil
+}
+
+func (h *Handler) List__DOMAIN_PLURAL_PASCAL__(ctx context.Context, _ *connect.Request[__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Request]) (*connect.Response[__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Response], error) {
+	items, err := h.usecase.List__DOMAIN_PLURAL_PASCAL__(ctx)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "failed to list __DOMAIN_PLURAL__", "error", err)
+		return nil, connectError(err)
+	}
+
+	response := &__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Response{__DOMAIN_PLURAL_PASCAL__: make([]*__DOMAIN__v1.__DOMAIN_PASCAL__, 0, len(items))}
+	for _, item := range items {
+		response.__DOMAIN_PLURAL_PASCAL__ = append(response.__DOMAIN_PLURAL_PASCAL__, toProto__DOMAIN_PASCAL__(item))
+	}
+
+	return connect.NewResponse(response), nil
+}
+
+func toProto__DOMAIN_PASCAL__(item __DOMAIN_PASCAL__) *__DOMAIN__v1.__DOMAIN_PASCAL__ {
+	return &__DOMAIN__v1.__DOMAIN_PASCAL__{
+		Id:        item.ID,
+		Name:      item.Name,
+		Active:    item.Active,
+		CreatedAt: timestamppb.New(item.CreatedAt),
+		UpdatedAt: timestamppb.New(item.UpdatedAt),
+	}
+}
+
+func connectError(err error) *connect.Error {
+	switch {
+	case errors.Is(err, ErrInvalidArgument):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, ErrNotFound):
+		return connect.NewError(connect.CodeNotFound, err)
+	default:
+		return connect.NewError(connect.CodeInternal, err)
+	}
+}

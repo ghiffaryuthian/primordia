@@ -1,0 +1,17 @@
+-- name: Create__DOMAIN_PASCAL__ :one
+INSERT INTO __DOMAIN_TABLE__ (
+    name,
+    active
+)
+VALUES ($1, $2)
+RETURNING *;
+
+-- name: Get__DOMAIN_PASCAL__ :one
+SELECT *
+FROM __DOMAIN_TABLE__
+WHERE id = $1;
+
+-- name: List__DOMAIN_PLURAL_PASCAL__ :many
+SELECT *
+FROM __DOMAIN_TABLE__
+ORDER BY created_at ASC, id ASC;
