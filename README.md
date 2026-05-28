@@ -1,8 +1,6 @@
 # Primordia
 
-Primordia is a standalone project bootstrapper. It asks for a service name,
-Go module path, target directory, and domain list, then renders a fresh
-full-stack service scaffold from templates.
+Primordia is a standalone opinionated fullstack project bootstrapper. It asks for a service name, Go module path, target directory, and domain list, then renders a fresh full-stack service scaffold from templates.
 
 ## Usage
 
@@ -55,5 +53,3 @@ Primordia creates:
 - local Docker Compose files and Dockerfiles
 - default telemetry registry YAML and OTLP tracing setup
 - a TanStack Router and TanStack Query web shell with shared Connect clients
-
-Generated projects do not include optimizer or Python service files.
