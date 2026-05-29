@@ -1,54 +1,105 @@
 groups:
+  - id: metric.__DOMAIN__.create.request
+    type: metric
+    metric_name: __DOMAIN__.create.request
+    instrument: counter
+    unit: "{request}"
+    stability: development
+    brief: Number of __DOMAIN__ creation requests.
+
+  - id: metric.__DOMAIN__.get.request
+    type: metric
+    metric_name: __DOMAIN__.get.request
+    instrument: counter
+    unit: "{request}"
+    stability: development
+    brief: Number of __DOMAIN__ lookup requests.
+
+  - id: metric.__DOMAIN__.list.request
+    type: metric
+    metric_name: __DOMAIN__.list.request
+    instrument: counter
+    unit: "{request}"
+    stability: development
+    brief: Number of __DOMAIN__ list requests.
+
   - id: span.__DOMAIN__.handler.create
     type: span
     span_kind: internal
     stability: development
     brief: Create __DOMAIN__ handler execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.__DOMAIN__.handler.get
     type: span
     span_kind: internal
     stability: development
     brief: Get __DOMAIN__ handler execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.__DOMAIN__.handler.list
     type: span
     span_kind: internal
     stability: development
     brief: List __DOMAIN__ handler execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.__DOMAIN__.usecase.create
     type: span
     span_kind: internal
     stability: development
     brief: Create __DOMAIN__ usecase execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.__DOMAIN__.usecase.get
     type: span
     span_kind: internal
     stability: development
     brief: Get __DOMAIN__ usecase execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.__DOMAIN__.usecase.list
     type: span
     span_kind: internal
     stability: development
     brief: List __DOMAIN__ usecase execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.postgres.__DOMAIN__.create
     type: span
     span_kind: client
     stability: development
     brief: PostgreSQL create __DOMAIN__ query.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.postgres.__DOMAIN__.get
     type: span
     span_kind: client
     stability: development
     brief: PostgreSQL get __DOMAIN__ query.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.postgres.__DOMAIN__.list
     type: span
     span_kind: client
     stability: development
     brief: PostgreSQL list __DOMAIN__ query.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in

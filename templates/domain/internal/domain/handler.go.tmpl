@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	__DOMAIN__v1 "__GO_MODULE__/internal/gen/__SERVICE_PROTO__/__DOMAIN__/v1"
 	"__GO_MODULE__/internal/infra/observability"
+	"__GO_MODULE__/internal/infra/observability/registry"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -20,13 +21,30 @@ type ServiceUsecase interface {
 type Handler struct {
 	usecase ServiceUsecase
 	logger  *slog.Logger
+	metrics *registry.MetricsRegistry
+	tracer  *registry.TracesRegistry
 }
 
-func NewHandler(usecase ServiceUsecase, instrumentation observability.Instrumentation) *Handler {
-	return &Handler{usecase: usecase, logger: instrumentation.Logger()}
+func NewHandler(usecase ServiceUsecase, instrumentation observability.Instrumentation) (*Handler, error) {
+	metrics, err := instrumentation.Metrics()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Handler{
+		usecase: usecase,
+		logger:  instrumentation.Logger(),
+		metrics: metrics,
+		tracer:  instrumentation.Tracer(),
+	}, nil
 }
 
-func (h *Handler) Create__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request[__DOMAIN__v1.Create__DOMAIN_PASCAL__Request]) (*connect.Response[__DOMAIN__v1.Create__DOMAIN_PASCAL__Response], error) {
+func (h *Handler) Create__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request[__DOMAIN__v1.Create__DOMAIN_PASCAL__Request]) (_ *connect.Response[__DOMAIN__v1.Create__DOMAIN_PASCAL__Response], err error) {
+	ctx, span := h.tracer.Start__DOMAIN_PASCAL__HandlerCreate(ctx)
+	defer h.tracer.FinishSpan(span, &err)
+
+	h.metrics.__DOMAIN_PASCAL__CreateRequest.Add(ctx, 1)
+
 	created, err := h.usecase.Create__DOMAIN_PASCAL__(ctx, Create__DOMAIN_PASCAL__Input{
 		Name:   req.Msg.Name,
 		Active: req.Msg.Active,
@@ -39,7 +57,12 @@ func (h *Handler) Create__DOMAIN_PASCAL__(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(&__DOMAIN__v1.Create__DOMAIN_PASCAL__Response{__DOMAIN_PASCAL__: toProto__DOMAIN_PASCAL__(created)}), nil
 }
 
-func (h *Handler) Get__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request[__DOMAIN__v1.Get__DOMAIN_PASCAL__Request]) (*connect.Response[__DOMAIN__v1.Get__DOMAIN_PASCAL__Response], error) {
+func (h *Handler) Get__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request[__DOMAIN__v1.Get__DOMAIN_PASCAL__Request]) (_ *connect.Response[__DOMAIN__v1.Get__DOMAIN_PASCAL__Response], err error) {
+	ctx, span := h.tracer.Start__DOMAIN_PASCAL__HandlerGet(ctx)
+	defer h.tracer.FinishSpan(span, &err)
+
+	h.metrics.__DOMAIN_PASCAL__GetRequest.Add(ctx, 1)
+
 	found, err := h.usecase.Get__DOMAIN_PASCAL__(ctx, req.Msg.Id)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get __DOMAIN__", "error", err)
@@ -49,7 +72,12 @@ func (h *Handler) Get__DOMAIN_PASCAL__(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&__DOMAIN__v1.Get__DOMAIN_PASCAL__Response{__DOMAIN_PASCAL__: toProto__DOMAIN_PASCAL__(found)}), nil
 }
 
-func (h *Handler) List__DOMAIN_PLURAL_PASCAL__(ctx context.Context, _ *connect.Request[__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Request]) (*connect.Response[__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Response], error) {
+func (h *Handler) List__DOMAIN_PLURAL_PASCAL__(ctx context.Context, _ *connect.Request[__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Request]) (_ *connect.Response[__DOMAIN__v1.List__DOMAIN_PLURAL_PASCAL__Response], err error) {
+	ctx, span := h.tracer.Start__DOMAIN_PASCAL__HandlerList(ctx)
+	defer h.tracer.FinishSpan(span, &err)
+
+	h.metrics.__DOMAIN_PASCAL__ListRequest.Add(ctx, 1)
+
 	items, err := h.usecase.List__DOMAIN_PLURAL_PASCAL__(ctx)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to list __DOMAIN_PLURAL__", "error", err)

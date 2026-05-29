@@ -1,0 +1,9 @@
+groups:
+  - id: span.postgres.connection.open
+    type: span
+    span_kind: client
+    stability: development
+    brief: PostgreSQL connection pool initialization.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in

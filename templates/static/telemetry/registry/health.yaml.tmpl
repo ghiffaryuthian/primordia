@@ -1,12 +1,26 @@
 groups:
+  - id: metric.health.request
+    type: metric
+    metric_name: health.request
+    instrument: counter
+    unit: "{request}"
+    stability: development
+    brief: Number of health check requests.
+
   - id: span.health.usecase.get
     type: span
     span_kind: internal
     stability: development
     brief: Health check usecase execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in
 
   - id: span.health.handler.get
     type: span
     span_kind: internal
     stability: development
     brief: Health check handler execution.
+    attributes:
+      - ref: code.function.name
+        requirement_level: opt_in

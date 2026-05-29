@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	healthv1 "__GO_MODULE__/internal/gen/__SERVICE_PROTO__/health/v1"
 	"__GO_MODULE__/internal/infra/observability"
+	"__GO_MODULE__/internal/infra/observability/registry"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -17,13 +18,21 @@ type HealthUsecase interface {
 type Handler struct {
 	usecase HealthUsecase
 	logger  *slog.Logger
+	tracer  *registry.TracesRegistry
 }
 
 func NewHandler(usecase HealthUsecase, instrumentation observability.Instrumentation) *Handler {
-	return &Handler{usecase: usecase, logger: instrumentation.Logger()}
+	return &Handler{
+		usecase: usecase,
+		logger:  instrumentation.Logger(),
+		tracer:  instrumentation.Tracer(),
+	}
 }
 
-func (h *Handler) GetHealth(ctx context.Context, _ *connect.Request[healthv1.GetHealthRequest]) (*connect.Response[healthv1.GetHealthResponse], error) {
+func (h *Handler) GetHealth(ctx context.Context, _ *connect.Request[healthv1.GetHealthRequest]) (_ *connect.Response[healthv1.GetHealthResponse], err error) {
+	ctx, span := h.tracer.StartHealthHandlerGet(ctx)
+	defer h.tracer.FinishSpan(span, &err)
+
 	status, err := h.usecase.GetHealth(ctx)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "failed to get health", "error", err)

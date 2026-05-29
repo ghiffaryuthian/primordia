@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"time"
 
+	"__GO_MODULE__/internal/infra/observability"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type Config struct {
@@ -16,7 +18,11 @@ type Config struct {
 	DBName   string
 }
 
-func NewConnection(ctx context.Context, cfg *Config) (*pgxpool.Pool, error) {
+func NewConnection(ctx context.Context, cfg *Config, instrumentation observability.Instrumentation) (pool *pgxpool.Pool, err error) {
+	tracer := instrumentation.Tracer()
+	ctx, span := tracer.StartPostgresConnectionOpen(ctx, trace.WithSpanKind(trace.SpanKindClient))
+	defer tracer.FinishSpan(span, &err)
+
 	connStr := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName)
 	poolConfig, err := pgxpool.ParseConfig(connStr)
 	if err != nil {
@@ -26,11 +32,12 @@ func NewConnection(ctx context.Context, cfg *Config) (*pgxpool.Pool, error) {
 	ctx, cancel := context.WithTimeout(ctx, 50*time.Second)
 	defer cancel()
 
-	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
+	pool, err = pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		return nil, err
 	}
-	if err := pool.Ping(ctx); err != nil {
+	err = pool.Ping(ctx)
+	if err != nil {
 		pool.Close()
 		return nil, err
 	}

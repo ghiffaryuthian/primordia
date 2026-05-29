@@ -7,13 +7,13 @@ Primordia is a standalone opinionated fullstack project bootstrapper. It asks fo
 Interactive:
 
 ```sh
-/home/ghiffaryuthian/primordia/scripts/init-project
+/home/ghiffaryuthian/primordia/init-project
 ```
 
 Repeatable:
 
 ```sh
-/home/ghiffaryuthian/primordia/scripts/init-project \
+/home/ghiffaryuthian/primordia/init-project \
   --service atlas \
   --module github.com/yourname/atlas \
   --target /home/ghiffaryuthian/atlas \
@@ -28,6 +28,7 @@ cd /home/ghiffaryuthian/atlas
 git init
 pnpm --dir web install
 task dev:tools
+task telemetry:generate
 task proto:generate
 task sqlc:generate
 go mod tidy
@@ -36,7 +37,7 @@ task dev:prepare
 
 ## Template Layout
 
-- `scripts/init-project`: prompts, normalizes names, builds domain-specific replacement blocks, and renders templates.
+- `init-project`: prompts, normalizes names, builds domain-specific replacement blocks, and renders templates.
 - `templates/static`: files rendered once per project.
 - `templates/domain`: files rendered once per domain.
 - `templates/snippets`: small reusable pieces, currently used for migration table/drop blocks.
@@ -51,5 +52,5 @@ Primordia creates:
 - PostgreSQL migrations and sqlc queries for each domain
 - Postgres infrastructure and repository implementations
 - local Docker Compose files and Dockerfiles
-- default telemetry registry YAML and OTLP tracing setup
+- default telemetry registry YAML, Weaver codegen templates, OTLP metrics, and OTLP tracing setup
 - a TanStack Router and TanStack Query web shell with shared Connect clients

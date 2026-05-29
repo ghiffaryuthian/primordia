@@ -4,22 +4,36 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/trace"
+	"__GO_MODULE__/internal/infra/observability"
+	"__GO_MODULE__/internal/infra/observability/registry"
 )
 
 type Usecase struct {
 	serviceName string
 	environment string
-	tracer      trace.Tracer
+	metrics     *registry.MetricsRegistry
+	tracer      *registry.TracesRegistry
 }
 
-func NewUsecase(serviceName string, environment string, tracer trace.Tracer) *Usecase {
-	return &Usecase{serviceName: serviceName, environment: environment, tracer: tracer}
+func NewUsecase(serviceName string, environment string, instrumentation observability.Instrumentation) (*Usecase, error) {
+	metrics, err := instrumentation.Metrics()
+	if err != nil {
+		return nil, err
+	}
+
+	return &Usecase{
+		serviceName: serviceName,
+		environment: environment,
+		metrics:     metrics,
+		tracer:      instrumentation.Tracer(),
+	}, nil
 }
 
-func (u *Usecase) GetHealth(ctx context.Context) (Status, error) {
-	_, span := u.tracer.Start(ctx, "health.usecase.get")
-	defer span.End()
+func (u *Usecase) GetHealth(ctx context.Context) (status Status, err error) {
+	ctx, span := u.tracer.StartHealthUsecaseGet(ctx)
+	defer u.tracer.FinishSpan(span, &err)
+
+	u.metrics.HealthRequest.Add(ctx, 1)
 
 	return Status{
 		ServiceName: u.serviceName,

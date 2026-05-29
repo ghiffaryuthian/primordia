@@ -1,0 +1,24 @@
+package registry
+
+import (
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
+)
+
+func (reg *TracesRegistry) FinishSpan(span trace.Span, err *error) {
+	if err == nil || *err == nil {
+		span.SetStatus(codes.Ok, "")
+	} else {
+		reg.RecordSpanError(span, *err)
+	}
+	span.End()
+}
+
+func (reg *TracesRegistry) RecordSpanError(span trace.Span, err error) {
+	if err == nil {
+		return
+	}
+
+	span.RecordError(err)
+	span.SetStatus(codes.Error, err.Error())
+}

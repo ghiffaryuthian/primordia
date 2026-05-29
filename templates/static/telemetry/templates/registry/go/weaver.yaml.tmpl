@@ -1,0 +1,24 @@
+text_maps:
+  go_metric_instruments:
+    counter: Int64Counter
+    gauge: Int64Gauge
+    histogram: Float64Histogram
+    updowncounter: Int64UpDownCounter
+
+acronyms: ["API", "HTTP", "ID", "OTel", "URL"]
+
+comment_formats:
+  go:
+    format: markdown
+    prefix: "// "
+
+templates:
+  - template: metrics_gen.go.j2
+    filter: 'semconv_grouped_metrics'
+    application_mode: single
+    file_name: "internal/infra/observability/registry/metrics_gen.go"
+
+  - template: traces_gen.go.j2
+    filter: 'semconv_signal("span"; {}) | group_by(.root_namespace) | map({root_namespace: .[0].root_namespace, spans: . | sort_by(.id)})'
+    application_mode: single
+    file_name: "internal/infra/observability/registry/traces_gen.go"

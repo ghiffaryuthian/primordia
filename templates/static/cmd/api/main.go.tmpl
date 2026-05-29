@@ -58,9 +58,9 @@ func main() {
 __DOMAIN_SCOPE_INITS_GO__	logger := apiObs.Logger()
 	tracer := apiObs.Tracer()
 
-	ctx, bootstrapSpan := tracer.Start(ctx, "service.bootstrap")
+	ctx, bootstrapSpan := tracer.StartServiceBootstrap(ctx)
 	bootstrapErr := errors.New("service bootstrap did not complete")
-	defer observability.FinishSpan(bootstrapSpan, &bootstrapErr)
+	defer tracer.FinishSpan(bootstrapSpan, &bootstrapErr)
 
 	db, err := postgresinfra.NewConnection(ctx, &postgresinfra.Config{
 		Host:     cfg.Database.Host,
@@ -68,7 +68,7 @@ __DOMAIN_SCOPE_INITS_GO__	logger := apiObs.Logger()
 		User:     cfg.Database.User,
 		Password: cfg.Database.Password,
 		DBName:   cfg.Database.Name,
-	})
+	}, pgObs)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -77,7 +77,11 @@ __DOMAIN_SCOPE_INITS_GO__	logger := apiObs.Logger()
 
 	queries := sqlc.New(db)
 
-	healthUsecase := health.NewUsecase(serviceName, cfg.App.Environment, healthObs.Tracer())
+	healthUsecase, err := health.NewUsecase(serviceName, cfg.App.Environment, healthObs)
+	if err != nil {
+		logger.Error("failed to initialize health usecase", "error", err)
+		os.Exit(1)
+	}
 	healthHandler := health.NewHandler(healthUsecase, healthObs)
 __DOMAIN_INIT_BLOCKS_GO__
 	mux := http.NewServeMux()

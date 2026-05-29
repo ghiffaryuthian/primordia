@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: ${DATABASE_USER:-postgres}
       POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-__SERVICE_SLUG__}
-      POSTGRES_DB: ${DATABASE_NAME:-__SERVICE_PROTO__}
+      POSTGRES_DB: ${DATABASE_NAME:-__SERVICE_SLUG__}
     ports:
       - "${DATABASE_PORT:-5432}:5432"
     healthcheck:

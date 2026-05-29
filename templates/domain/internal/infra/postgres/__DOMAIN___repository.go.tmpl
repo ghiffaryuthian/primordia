@@ -5,13 +5,14 @@ import (
 
 	"__GO_MODULE__/internal/__DOMAIN__"
 	"__GO_MODULE__/internal/infra/observability"
+	"__GO_MODULE__/internal/infra/observability/registry"
 	"__GO_MODULE__/internal/infra/postgres/sqlc"
 	"go.opentelemetry.io/otel/trace"
 )
 
 type __DOMAIN_PASCAL__Repository struct {
 	queries *sqlc.Queries
-	tracer  trace.Tracer
+	tracer  *registry.TracesRegistry
 }
 
 func New__DOMAIN_PASCAL__Repository(queries *sqlc.Queries, instrumentation observability.Instrumentation) *__DOMAIN_PASCAL__Repository {
@@ -19,8 +20,8 @@ func New__DOMAIN_PASCAL__Repository(queries *sqlc.Queries, instrumentation obser
 }
 
 func (r *__DOMAIN_PASCAL__Repository) Create__DOMAIN_PASCAL__(ctx context.Context, input __DOMAIN__.Create__DOMAIN_PASCAL__Input) (created __DOMAIN__.__DOMAIN_PASCAL__, err error) {
-	ctx, span := r.tracer.Start(ctx, "postgres.__DOMAIN__.create", trace.WithSpanKind(trace.SpanKindClient))
-	defer observability.FinishSpan(span, &err)
+	ctx, span := r.tracer.StartPostgres__DOMAIN_PASCAL__Create(ctx, trace.WithSpanKind(trace.SpanKindClient))
+	defer r.tracer.FinishSpan(span, &err)
 
 	row, err := r.queries.Create__DOMAIN_PASCAL__(ctx, sqlc.Create__DOMAIN_PASCAL__Params{
 		Name:   input.Name,
@@ -37,8 +38,8 @@ func (r *__DOMAIN_PASCAL__Repository) Create__DOMAIN_PASCAL__(ctx context.Contex
 }
 
 func (r *__DOMAIN_PASCAL__Repository) Get__DOMAIN_PASCAL__(ctx context.Context, id string) (found __DOMAIN__.__DOMAIN_PASCAL__, err error) {
-	ctx, span := r.tracer.Start(ctx, "postgres.__DOMAIN__.get", trace.WithSpanKind(trace.SpanKindClient))
-	defer observability.FinishSpan(span, &err)
+	ctx, span := r.tracer.StartPostgres__DOMAIN_PASCAL__Get(ctx, trace.WithSpanKind(trace.SpanKindClient))
+	defer r.tracer.FinishSpan(span, &err)
 
 	row, err := r.queries.Get__DOMAIN_PASCAL__(ctx, id)
 	if err != nil {
@@ -52,8 +53,8 @@ func (r *__DOMAIN_PASCAL__Repository) Get__DOMAIN_PASCAL__(ctx context.Context, 
 }
 
 func (r *__DOMAIN_PASCAL__Repository) List__DOMAIN_PLURAL_PASCAL__(ctx context.Context) (items []__DOMAIN__.__DOMAIN_PASCAL__, err error) {
-	ctx, span := r.tracer.Start(ctx, "postgres.__DOMAIN__.list", trace.WithSpanKind(trace.SpanKindClient))
-	defer observability.FinishSpan(span, &err)
+	ctx, span := r.tracer.StartPostgres__DOMAIN_PASCAL__List(ctx, trace.WithSpanKind(trace.SpanKindClient))
+	defer r.tracer.FinishSpan(span, &err)
 
 	rows, err := r.queries.List__DOMAIN_PLURAL_PASCAL__(ctx)
 	if err != nil {

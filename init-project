@@ -159,6 +159,11 @@ render_template() {
     s/__DOMAIN_REGISTRATIONS_GO__/$ENV{DOMAIN_REGISTRATIONS_GO}/g;
     s/__DOMAIN_CLIENT_IMPORTS_TS__/$ENV{DOMAIN_CLIENT_IMPORTS_TS}/g;
     s/__DOMAIN_CLIENT_ENTRIES_TS__/$ENV{DOMAIN_CLIENT_ENTRIES_TS}/g;
+    s/__METRIC_FIELDS_GO__/$ENV{METRIC_FIELDS_GO}/g;
+    s/__METRIC_INIT_GO__/$ENV{METRIC_INIT_GO}/g;
+    s/__TRACE_FIELDS_GO__/$ENV{TRACE_FIELDS_GO}/g;
+    s/__TRACE_INIT_GO__/$ENV{TRACE_INIT_GO}/g;
+    s/__TRACE_METHODS_GO__/$ENV{TRACE_METHODS_GO}/g;
     s/__DOMAIN__/$ENV{DOMAIN}/g;
     s/__DOMAIN_PASCAL__/$ENV{DOMAIN_PASCAL}/g;
     s/__DOMAIN_CAMEL__/$ENV{DOMAIN_CAMEL}/g;
@@ -263,6 +268,49 @@ build_dynamic_blocks() {
   DOMAIN_REGISTRATIONS_GO=""
   DOMAIN_CLIENT_IMPORTS_TS=""
   DOMAIN_CLIENT_ENTRIES_TS=""
+  METRIC_FIELDS_GO=""
+  METRIC_INIT_GO=""
+  TRACE_FIELDS_GO=""
+  TRACE_INIT_GO=""
+  TRACE_METHODS_GO=""
+
+  add_metric() {
+    local field="$1"
+    local name="$2"
+    local description="$3"
+    local unit="$4"
+
+    METRIC_FIELDS_GO+=$'\t'"// $field: $description"$'\n'
+    METRIC_FIELDS_GO+=$'\t'"$field metric.Int64Counter"$'\n'
+    METRIC_INIT_GO+=$'\t'"reg.$field, err = m.Int64Counter("$'\n'
+    METRIC_INIT_GO+=$'\t\t'"\"$name\","$'\n'
+    METRIC_INIT_GO+=$'\t\t'"metric.WithDescription(\"$description\"),"$'\n'
+    METRIC_INIT_GO+=$'\t\t'"metric.WithUnit(\"$unit\"),"$'\n'
+    METRIC_INIT_GO+=$'\t'")"$'\n'
+    METRIC_INIT_GO+=$'\t'"if err != nil {"$'\n'
+    METRIC_INIT_GO+=$'\t\t'"return nil, err"$'\n'
+    METRIC_INIT_GO+=$'\t'"}"$'\n'
+  }
+
+  add_trace() {
+    local field="$1"
+    local name="$2"
+    local description="$3"
+
+    TRACE_FIELDS_GO+=$'\t'"// $field: $description"$'\n'
+    TRACE_FIELDS_GO+=$'\t'"$field string"$'\n'
+    TRACE_INIT_GO+=$'\t\t'"$field: \"$name\","$'\n'
+    TRACE_METHODS_GO+=$'\n'"// Start$field starts the $name span."$'\n'
+    TRACE_METHODS_GO+="func (reg *TracesRegistry) Start$field(ctx context.Context, opts ...trace.SpanStartOption) (context.Context, trace.Span) {"$'\n'
+    TRACE_METHODS_GO+=$'\t'"return reg.tracer.Start(ctx, reg.$field, opts...)"$'\n'
+    TRACE_METHODS_GO+="}"$'\n'
+  }
+
+  add_metric "HealthRequest" "health.request" "Number of health check requests." "{request}"
+  add_trace "ServiceBootstrap" "service.bootstrap" "Service bootstrap execution."
+  add_trace "HealthHandlerGet" "health.handler.get" "Health check handler execution."
+  add_trace "HealthUsecaseGet" "health.usecase.get" "Health check usecase execution."
+  add_trace "PostgresConnectionOpen" "postgres.connection.open" "PostgreSQL connection pool initialization."
 
   for domain in "${domain_snakes[@]}"; do
     local pascal camel plural plural_pascal
@@ -278,15 +326,34 @@ build_dynamic_blocks() {
     DOMAIN_SCOPE_INITS_GO+=$'\t'"${camel}Obs := obs.Scope(scope${pascal})"$'\n'
     DOMAIN_INIT_BLOCKS_GO+=$'\n\t'"${camel}Repository := postgresinfra.New${pascal}Repository(queries, ${camel}Obs)"$'\n'
     DOMAIN_INIT_BLOCKS_GO+=$'\t'"${camel}Usecase := $domain.NewUsecase(${camel}Repository, ${camel}Obs)"$'\n'
-    DOMAIN_INIT_BLOCKS_GO+=$'\t'"${camel}Handler := $domain.NewHandler(${camel}Usecase, ${camel}Obs)"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t'"${camel}Handler, err := $domain.NewHandler(${camel}Usecase, ${camel}Obs)"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t'"if err != nil {"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t\t'"logger.Error(\"failed to initialize $domain handler\", \"error\", err)"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t\t'"os.Exit(1)"$'\n'
+    DOMAIN_INIT_BLOCKS_GO+=$'\t'"}"$'\n'
     DOMAIN_REGISTRATIONS_GO+=$'\t'"$domain.RegisterConnect(mux, ${camel}Handler)"$'\n'
     DOMAIN_CLIENT_IMPORTS_TS+="import { ${pascal}Service } from '#/gen/$SERVICE_PROTO/$domain/v1/${domain}_pb'"$'\n'
     DOMAIN_CLIENT_ENTRIES_TS+=$'    '"$camel: createClient(${pascal}Service, transport),"$'\n'
+
+    add_metric "${pascal}CreateRequest" "$domain.create.request" "Number of $domain creation requests." "{request}"
+    add_metric "${pascal}GetRequest" "$domain.get.request" "Number of $domain lookup requests." "{request}"
+    add_metric "${pascal}ListRequest" "$domain.list.request" "Number of $domain list requests." "{request}"
+
+    add_trace "${pascal}HandlerCreate" "$domain.handler.create" "$pascal creation handler execution."
+    add_trace "${pascal}HandlerGet" "$domain.handler.get" "$pascal lookup handler execution."
+    add_trace "${pascal}HandlerList" "$domain.handler.list" "$pascal list handler execution."
+    add_trace "${pascal}UsecaseCreate" "$domain.usecase.create" "$pascal creation usecase execution."
+    add_trace "${pascal}UsecaseGet" "$domain.usecase.get" "$pascal lookup usecase execution."
+    add_trace "${pascal}UsecaseList" "$domain.usecase.list" "$pascal list usecase execution."
+    add_trace "Postgres${pascal}Create" "postgres.$domain.create" "PostgreSQL $domain creation query execution."
+    add_trace "Postgres${pascal}Get" "postgres.$domain.get" "PostgreSQL $domain lookup query execution."
+    add_trace "Postgres${pascal}List" "postgres.$domain.list" "PostgreSQL $domain list query execution."
   done
 
   export DOMAINS_README DOMAINS_TS DOMAIN_IMPORTS_GO DOMAIN_SCOPE_CONSTS_GO
   export DOMAIN_SCOPE_INITS_GO DOMAIN_INIT_BLOCKS_GO DOMAIN_REGISTRATIONS_GO
   export DOMAIN_CLIENT_IMPORTS_TS DOMAIN_CLIENT_ENTRIES_TS
+  export METRIC_FIELDS_GO METRIC_INIT_GO TRACE_FIELDS_GO TRACE_INIT_GO TRACE_METHODS_GO
 }
 
 if [[ ! -d "$template_dir/static" || ! -d "$template_dir/domain" ]]; then
@@ -400,6 +467,12 @@ Recommended next steps:
   task dev:tools
   task proto:generate
   task sqlc:generate
+  task telemetry:generate
   go mod tidy
   task dev:prepare
+  task docker:up:infra
+  task docker:up:app
+
+  # Optional: 
+  task docker:up:obs
 SUMMARY

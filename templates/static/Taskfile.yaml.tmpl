@@ -9,17 +9,87 @@ vars:
   GOOSE_VERSION: v3.27.1
   PROTOC_GEN_GO_VERSION: v1.36.11
   PROTOC_GEN_CONNECT_GO_VERSION: v1.20.0
+  WEAVER_IMAGE: '{{.WEAVER_IMAGE | default "otel/weaver:v0.19.0"}}'
   INFRA_COMPOSE: deploy/local/docker-compose.infra.yaml
   OBS_COMPOSE: deploy/local/docker-compose.observability.yaml
   APP_COMPOSE: deploy/local/docker-compose.app.yaml
 
 tasks:
+  web:install:
+    desc: Install web dependencies.
+    dir: web
+    cmds:
+      - pnpm install
+
+  proto:generate:
+    desc: Generate Go, ConnectRPC, and TypeScript protobuf bindings.
+    cmds:
+      - PATH="$(go env GOPATH)/bin:{{.ROOT_DIR}}/web/node_modules/.bin:$PATH" buf generate
+
+  sqlc:generate:
+    desc: Generate typed PostgreSQL accessors.
+    cmds:
+      - sqlc generate
+
+  telemetry:generate:
+    desc: Generate OpenTelemetry metrics and traces from Weaver semantic conventions.
+    cmds:
+      - mkdir -p internal/infra/observability/registry
+      - |
+        if command -v weaver >/dev/null 2>&1; then
+          weaver registry check --registry telemetry/registry
+          weaver registry generate --registry telemetry/registry --templates telemetry/templates go .
+        elif command -v docker >/dev/null 2>&1; then
+          DOCKER_USER="$(id -u):$(id -g)"
+
+          docker run --rm \
+            --user "$DOCKER_USER" \
+            --env HOME=/tmp/weaver \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "{{.WEAVER_IMAGE}}" \
+            registry check --registry /workspace/telemetry/registry
+
+          docker run --rm \
+            --user "$DOCKER_USER" \
+            --env HOME=/tmp/weaver \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "{{.WEAVER_IMAGE}}" \
+            registry generate --registry /workspace/telemetry/registry --templates /workspace/telemetry/templates go /workspace
+        else
+          echo "weaver is required to generate telemetry code. Install weaver or Docker." >&2
+          exit 1
+        fi
+      - gofmt -w internal/infra/observability/registry/metrics_gen.go internal/infra/observability/registry/traces_gen.go internal/infra/observability/registry/traces.go
+
+  migrate:up:
+    desc: Apply database migrations.
+    cmds:
+      - goose up
+
+  migrate:down:
+    desc: Rollback the last migration.
+    cmds:
+      - goose down
+
+  migrate:status:
+    desc: Show migration status.
+    cmds:
+      - goose status
+
+  migrate:create:
+    desc: "Create a new timestamped migration. Usage: task migrate:create -- add_widget"
+    cmds:
+      - goose create {{.NAME | default "migration"}} sql
+
   dev:prepare:
     desc: Prepare local development tools, generated code, database, and migrations.
     cmds:
-      - cp -n .env.sample .env || true
+      - cp --update .env.sample .env
       - task: dev:tools
       - task: web:install
+      - task: telemetry:generate
       - task: proto:generate
       - task: sqlc:generate
       - docker compose --file {{.INFRA_COMPOSE}} up --detach --remove-orphans db
@@ -48,31 +118,16 @@ tasks:
         install_go_tool protoc-gen-go {{.PROTOC_GEN_GO_VERSION}} google.golang.org/protobuf/cmd/protoc-gen-go
         install_go_tool protoc-gen-connect-go {{.PROTOC_GEN_CONNECT_GO_VERSION}} connectrpc.com/connect/cmd/protoc-gen-connect-go
 
-  web:install:
-    desc: Install web dependencies.
-    dir: web
+  dev:cleanup:
+    desc: Cleanup development environment.
     cmds:
-      - pnpm install
+      - docker compose --file {{.INFRA_COMPOSE}} down --volumes
 
-  proto:generate:
-    desc: Generate Go, ConnectRPC, and TypeScript protobuf bindings.
+  dev:reset:
+    desc: Reset development environment.
     cmds:
-      - PATH="$(go env GOPATH)/bin:{{.ROOT_DIR}}/web/node_modules/.bin:$PATH" buf generate
-
-  sqlc:generate:
-    desc: Generate typed PostgreSQL accessors.
-    cmds:
-      - sqlc generate
-
-  migrate:up:
-    desc: Apply database migrations.
-    cmds:
-      - goose -dir db/migrations postgres "host=${DATABASE_HOST:-localhost} port=${DATABASE_PORT:-5432} user=${DATABASE_USER:-postgres} password=${DATABASE_PASSWORD:-__SERVICE_SLUG__} dbname=${DATABASE_NAME:-__SERVICE_PROTO__} sslmode=disable" up
-
-  migrate:create:
-    desc: "Create a new timestamped migration. Usage: task migrate:create -- add_widget"
-    cmds:
-      - goose -dir db/migrations create {{.CLI_ARGS}} sql
+      - task: dev:cleanup
+      - task: dev:prepare
 
   dev:wait-for-db:
     internal: true
@@ -92,7 +147,27 @@ tasks:
   docker:up:
     desc: Build and start local app containers with infrastructure and observability.
     cmds:
-      - docker compose --file {{.INFRA_COMPOSE}} --file {{.OBS_COMPOSE}} --file {{.APP_COMPOSE}} up --build --detach --remove-orphans
+      - task: docker:up:infra
+      - task: docker:up:obs
+      - task: docker:up:app
+
+  docker:up:infra:
+    desc: Build and start local infrastructure containers.
+    cmds:
+      - docker compose --file {{.INFRA_COMPOSE}} up --build --detach --remove-orphans
+
+  docker:up:app:
+    desc: Build and start local app containers.
+    cmds:
+      - task: telemetry:generate
+      - task: proto:generate
+      - task: sqlc:generate
+      - docker compose --file {{.APP_COMPOSE}} up --build --detach --remove-orphans
+
+  docker:up:obs:
+    desc: Build and start local observability containers.
+    cmds:
+      - docker compose --file {{.OBS_COMPOSE}} up --build --detach --remove-orphans
 
   docker:down:
     desc: Stop local app, infrastructure, and observability containers.

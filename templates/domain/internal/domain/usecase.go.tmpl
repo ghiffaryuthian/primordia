@@ -4,12 +4,12 @@ import (
 	"context"
 
 	"__GO_MODULE__/internal/infra/observability"
-	"go.opentelemetry.io/otel/trace"
+	"__GO_MODULE__/internal/infra/observability/registry"
 )
 
 type Usecase struct {
 	repository Repository
-	tracer     trace.Tracer
+	tracer     *registry.TracesRegistry
 }
 
 func NewUsecase(repository Repository, instrumentation observability.Instrumentation) *Usecase {
@@ -17,8 +17,8 @@ func NewUsecase(repository Repository, instrumentation observability.Instrumenta
 }
 
 func (u *Usecase) Create__DOMAIN_PASCAL__(ctx context.Context, input Create__DOMAIN_PASCAL__Input) (created __DOMAIN_PASCAL__, err error) {
-	ctx, span := u.tracer.Start(ctx, "__DOMAIN__.usecase.create")
-	defer observability.FinishSpan(span, &err)
+	ctx, span := u.tracer.Start__DOMAIN_PASCAL__UsecaseCreate(ctx)
+	defer u.tracer.FinishSpan(span, &err)
 
 	if err := validateCreate__DOMAIN_PASCAL__Input(input); err != nil {
 		return __DOMAIN_PASCAL__{}, err
@@ -27,8 +27,8 @@ func (u *Usecase) Create__DOMAIN_PASCAL__(ctx context.Context, input Create__DOM
 }
 
 func (u *Usecase) Get__DOMAIN_PASCAL__(ctx context.Context, id string) (found __DOMAIN_PASCAL__, err error) {
-	ctx, span := u.tracer.Start(ctx, "__DOMAIN__.usecase.get")
-	defer observability.FinishSpan(span, &err)
+	ctx, span := u.tracer.Start__DOMAIN_PASCAL__UsecaseGet(ctx)
+	defer u.tracer.FinishSpan(span, &err)
 
 	if err := validateID(id); err != nil {
 		return __DOMAIN_PASCAL__{}, err
@@ -37,8 +37,8 @@ func (u *Usecase) Get__DOMAIN_PASCAL__(ctx context.Context, id string) (found __
 }
 
 func (u *Usecase) List__DOMAIN_PLURAL_PASCAL__(ctx context.Context) (items []__DOMAIN_PASCAL__, err error) {
-	ctx, span := u.tracer.Start(ctx, "__DOMAIN__.usecase.list")
-	defer observability.FinishSpan(span, &err)
+	ctx, span := u.tracer.Start__DOMAIN_PASCAL__UsecaseList(ctx)
+	defer u.tracer.FinishSpan(span, &err)
 
 	return u.repository.List__DOMAIN_PLURAL_PASCAL__(ctx)
 }
