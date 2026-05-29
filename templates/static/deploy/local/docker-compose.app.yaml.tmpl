@@ -9,12 +9,14 @@ services:
     environment:
       APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
       SERVER_ADDRESS: :8080
-      DATABASE_HOST: db
-      DATABASE_PORT: 5432
+      DATABASE_HOST: ${DATABASE_HOST_DOCKER:-host.docker.internal}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
       DATABASE_USER: ${DATABASE_USER:-postgres}
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-__SERVICE_SLUG__}
       DATABASE_NAME: ${DATABASE_NAME:-__SERVICE_PROTO__}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${API_PORT:-8080}:8080"
     restart: unless-stopped
